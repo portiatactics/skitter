@@ -1,0 +1,50 @@
+# Builds Skitter for Windows (VST3) and macOS (VST3 + AU) on GitHub's servers.
+# Push this folder to a GitHub repo, open the "Actions" tab, and download the
+# zipped plug-ins from the finished run. No compilers needed on your machine.
+name: Build Skitter
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get JUCE
+        run: git clone --depth 1 --branch 8.0.4 https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          else
+            cmake -B build
+          fi
+
+      - name: Build
+        run: cmake --build build --config Release --target Skitter_VST3 Skitter_Standalone ${{ runner.os == 'macOS' && 'Skitter_AU' || '' }}
+
+      - name: Collect
+        shell: bash
+        run: |
+          mkdir dist
+          cp -R build/Skitter_artefacts/Release/VST3/Skitter.vst3 dist/
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            cp -R build/Skitter_artefacts/Release/AU/Skitter.component dist/
+            cp -R build/Skitter_artefacts/Release/Standalone/Skitter.app dist/
+          else
+            cp build/Skitter_artefacts/Release/Standalone/Skitter.exe dist/
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Skitter-${{ runner.os }}
+          path: dist
